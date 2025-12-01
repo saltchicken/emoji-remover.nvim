@@ -29,7 +29,7 @@ enum AppError {
 struct Cli {
     /// Glob patterns to include (e.g., "*.rs" "src/**")
 
-    #[arg(long, short = 'i', num_args(1..), default_values_t = ["*.rs".to_string(), "*.toml".to_string(), "*.py".to_string(), "*.jsx".to_string(), "*.tsx".to_string(), "*.html".to_string(), "*.css".to_string()])]
+    #[arg(long, short = 'i', num_args(1..), default_values_t = ["*.rs".to_string(), "*.toml".to_string(), "*.py".to_string(), "*.jsx".to_string(), "*.tsx".to_string(), "*.html".to_string(), "*.css".to_string(), "*.js".to_string(), "*.ts".to_string()])]
     include: Vec<String>,
     /// Glob patterns to exclude (e.g., "target/*" "*.log")
     #[arg(long, short = 'e', num_args(1..))]
@@ -49,7 +49,36 @@ fn process_file(file_path: &Path) -> Result<(), AppError> {
         .lines()
         .map(|line| {
             let (comment_start, block_ender): (Option<usize>, Option<&str>) = if ext == "html" {
-                (line.find("<!--"), Some("-->"))
+                let html_idx = line.find("<!--");
+                let js_line_idx = line.find("//");
+                let css_block_idx = line.find("/*");
+
+                let mut best_start = None;
+                let mut best_ender = None;
+                let mut min_idx = usize::MAX;
+
+                if let Some(idx) = html_idx {
+                    if idx < min_idx {
+                        min_idx = idx;
+                        best_start = Some(idx);
+                        best_ender = Some("-->");
+                    }
+                }
+                if let Some(idx) = js_line_idx {
+                    if idx < min_idx {
+                        min_idx = idx;
+                        best_start = Some(idx);
+                        best_ender = None;
+                    }
+                }
+                if let Some(idx) = css_block_idx {
+                    if idx < min_idx {
+                        min_idx = idx;
+                        best_start = Some(idx);
+                        best_ender = Some("*/");
+                    }
+                }
+                (best_start, best_ender)
             } else if ext == "css" {
                 (line.find("/*"), Some("*/"))
             } else if matches!(ext, "jsx" | "tsx") {
