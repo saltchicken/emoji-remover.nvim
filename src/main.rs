@@ -28,8 +28,8 @@ enum AppError {
 #[derive(Parser, Debug)]
 struct Cli {
     /// Glob patterns to include (e.g., "*.rs" "src/**")
-    #[arg(long, short = 'i', num_args(1..), default_values_t = ["*.rs".to_string(), "*.toml".to_string(), "*.py".to_string(), "*.jsx".to_string(), "*.tsx".to_string()])]
 
+    #[arg(long, short = 'i', num_args(1..), default_values_t = ["*.rs".to_string(), "*.toml".to_string(), "*.py".to_string(), "*.jsx".to_string(), "*.tsx".to_string(), "*.html".to_string(), "*.css".to_string()])]
     include: Vec<String>,
     /// Glob patterns to exclude (e.g., "target/*" "*.log")
     #[arg(long, short = 'e', num_args(1..))]
@@ -44,41 +44,41 @@ fn process_file(file_path: &Path) -> Result<(), AppError> {
 
     let ext = file_path.extension().and_then(|s| s.to_str()).unwrap_or("");
 
-
-
     let mut modified = false;
     let cleaned_lines: Vec<String> = content
         .lines()
         .map(|line| {
-
-            let (comment_start, is_jsx_block) = if matches!(ext, "jsx" | "tsx") {
+            let (comment_start, block_ender): (Option<usize>, Option<&str>) = if ext == "html" {
+                (line.find("<!--"), Some("-->"))
+            } else if ext == "css" {
+                (line.find("/*"), Some("*/"))
+            } else if matches!(ext, "jsx" | "tsx") {
                 let slash_idx = line.find("//");
                 let block_idx = line.find("{/*");
                 match (slash_idx, block_idx) {
                     (Some(s), Some(b)) => {
                         // Pick the one that appears first
                         if s < b {
-                            (Some(s), false)
+                            (Some(s), None)
                         } else {
-                            (Some(b), true)
+                            (Some(b), Some("*/}"))
                         }
                     }
-                    (Some(s), None) => (Some(s), false),
-                    (None, Some(b)) => (Some(b), true),
-                    (None, None) => (None, false),
+                    (Some(s), None) => (Some(s), None),
+                    (None, Some(b)) => (Some(b), Some("*/}")),
+                    (None, None) => (None, None),
                 }
             } else if matches!(ext, "rs" | "js" | "ts") {
-                (line.find("//"), false)
+                (line.find("//"), None)
             } else {
-                (line.find('#'), false)
+                (line.find('#'), None)
             };
 
             if let Some(start) = comment_start {
-                if is_jsx_block {
-
+                if let Some(ender) = block_ender {
                     // Try to find the closing tag on the same line
-                    if let Some(end_offset) = line[start..].find("*/}") {
-                        let end = start + end_offset + 3; // 3 is length of "*/}"
+                    if let Some(end_offset) = line[start..].find(ender) {
+                        let end = start + end_offset + ender.len();
                         let comment_content = &line[start..end];
 
                         if comment_content.contains("‼️") {
